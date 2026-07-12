@@ -2,380 +2,255 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
-    <title>Roket Yakalama (Mobil Sürüm)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobil Roket</title>
     <style>
-        /* Mobil tarayıcılarda kaydırma, büyütme ve seçmeyi tamamen kapatıyoruz */
         * {
             box-sizing: border-box;
-            user-select: none;
-            -webkit-user-select: none;
-            -webkit-touch-callout: none;
-            touch-action: none;
             margin: 0;
             padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
         }
-        html, body {
+        body {
             background-color: #0d1b2a;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: sans-serif;
             overflow: hidden;
             width: 100vw;
             height: 100vh;
-            position: relative;
         }
         #gameCanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
             display: block;
-            z-index: 1;
+            background: #0b132b;
+            width: 100vw;
+            height: calc(100vh - 120px);
         }
-        #ui-overlay {
-            position: absolute;
-            top: 20px;
-            left: 15px;
-            right: 15px;
+        #controls {
             display: flex;
-            justify-content: space-between;
-            font-size: 14px;
-            pointer-events: none;
-            z-index: 10;
+            width: 100vw;
+            height: 120px;
+            background: #1c2541;
+            padding: 10px;
+            gap: 10px;
         }
-        .stat-box {
-            background: rgba(11, 19, 43, 0.95);
-            padding: 8px 12px;
-            border-radius: 8px;
-            border: 1px solid #3a506b;
-            color: #fff;
+        .move-btn {
+            flex: 1;
+            background: #3a506b;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 20px;
             font-weight: bold;
         }
+        .move-btn:active {
+            background: #5bc0be;
+        }
         #msg-screen {
-            position: absolute;
+            position: fixed;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
             background: #0b132b;
+            z-index: 9999;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            color: white;
+            padding: 20px;
             text-align: center;
-            padding: 30px;
-            z-index: 9999; 
         }
         #msg-title {
-            font-size: 28px;
-            margin-bottom: 15px;
-            font-weight: bold;
+            font-size: 24px;
             color: #06d6a0;
+            margin-bottom: 10px;
         }
         #msg-desc {
-            font-size: 16px;
-            margin-bottom: 35px;
+            font-size: 14px;
             color: #cbd5e1;
-            max-width: 290px;
-            line-height: 1.5;
+            margin-bottom: 30px;
         }
         #btn-start {
-            padding: 18px 60px;
+            padding: 15px 40px;
             background: #06d6a0;
-            border: none;
-            border-radius: 30px;
-            font-size: 20px;
-            font-weight: bold;
             color: #0b132b;
-            box-shadow: 0 6px #049f76;
-            cursor: pointer;
+            border: none;
+            border-radius: 20px;
+            font-size: 18px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
 
-    <canvas id="gameCanvas"></canvas>
-    
-    <div id="ui-overlay">
-        <div class="stat-box">Hız: <span id="speed-val">0</span> m/s</div>
-        <div class="stat-box">Yakıt: <span id="fuel-val">100</span>%</div>
-        <div class="stat-box">Skor: <span id="score-val">0</span></div>
-    </div>
-
     <div id="msg-screen">
         <div id="msg-title">Dron Gemisi İnişi</div>
-        <div id="msg-desc">Ekranın SOL tarafına basarak halatı sola, SAĞ tarafına basarak sağa çek! İniş motoru otomatik açılır.</div>
-        <button id="btn-start">BAŞLA</button>
+        <div id="msg-desc">Alttaki büyük butonlarla halatı sağa sola kaydır. İniş motoru otomatik çalışır.</div>
+        <button id="btn-start" onclick="startGame()">OYUNA BAŞLA</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="controls">
+        <button class="move-btn" id="left-btn">◀ SOL</button>
+        <button class="move-btn" id="right-btn">SAĞ ▶</button>
     </div>
 
     <script>
-        (function() {
-            const canvas = document.getElementById('gameCanvas');
-            const ctx = canvas.getContext('2d');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
 
-            let score = 0;
-            let gameState = 'START'; 
-            
-            const GRAVITY = 0.08;
-            const THRUST_ACCEL = 0.22;
-            const SAFE_SPEED = 2.5;
+        let gameState = 'START';
+        let rocket = { x: 0, y: 30, vx: 0, vy: 0, width: 12, height: 40, isThrusting: false };
+        let platform = { x: 0, y: 0, radius: 60, netWidth: 40, netX: 0 };
+        
+        let moveLeft = false;
+        let moveRight = false;
 
-            let rocket = { x: 0, y: 30, vx: 0, vy: 0, width: 14, height: 45, fuel: 100, isThrusting: false };
-            let platform = { x: 0, y: 0, radius: 70, netWidth: 46, netX: 0 };
-
-            let touchSide = null; // 'LEFT', 'RIGHT' veya null
-
-            const btnStart = document.getElementById('btn-start');
-            const msgScreen = document.getElementById('msg-screen');
-            const msgTitle = document.getElementById('msg-title');
-            const msgDesc = document.getElementById('msg-desc');
-
-            const speedVal = document.getElementById('speed-val');
-            const fuelVal = document.getElementById('fuel-val');
-            const scoreVal = document.getElementById('score-val');
-
-            function resizeGame() {
-                const w = window.innerWidth;
-                const h = window.innerHeight;
-                canvas.width = w;
-                canvas.height = h;
-                
-                platform.y = h - 60;
-                platform.x = w / 2;
-                
-                if (gameState === 'START') {
-                    platform.netX = platform.x;
-                    rocket.x = platform.x;
-                    rocket.y = 40;
-                }
+        function initDimensions() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight - 120;
+            platform.y = canvas.height - 20;
+            platform.x = canvas.width / 2;
+            if (gameState === 'START') {
+                platform.netX = platform.x;
             }
+        }
+        
+        window.addEventListener('resize', initDimensions);
+        initDimensions();
 
-            window.addEventListener('resize', resizeGame);
-            window.addEventListener('orientationchange', resizeGame);
-            resizeGame();
+        function startGame() {
+            initDimensions();
+            rocket.x = Math.random() * (canvas.width - 40) + 20;
+            rocket.y = 20;
+            rocket.vx = (Math.random() - 0.5) * 2;
+            rocket.vy = 0.5;
+            gameState = 'PLAYING';
+            document.getElementById('msg-screen').style.display = 'none';
+        }
 
-            function initGame() {
-                resizeGame();
-                rocket.x = Math.random() * (canvas.width - 60) + 30;
-                rocket.y = 40;
-                rocket.vx = (Math.random() - 0.5) * 2.5;
-                rocket.vy = 0.5;
-                rocket.fuel = 100;
-                rocket.isThrusting = false;
-                touchSide = null;
-                
-                gameState = 'PLAYING';
-                msgScreen.style.display = 'none';
-            }
+        function finishGame(title, desc, isSuccess) {
+            gameState = 'END';
+            document.getElementById('msg-title').innerText = title;
+            document.getElementById('msg-title').style.color = isSuccess ? '#06d6a0' : '#e63946';
+            document.getElementById('msg-desc').innerText = desc;
+            document.getElementById('btn-start').innerText = "YENİDEN DENE";
+            document.getElementById('msg-screen').style.display = 'flex';
+        }
 
-            // Giriş Ekranı Buton Tetikleyicisi
-            btnStart.addEventListener('touchstart', function(e) {
-                e.preventDefault();
-                initGame();
-            }, {passive: false});
-            btnStart.addEventListener('click', function(e) {
-                e.preventDefault();
-                initGame();
-            });
+        // Buton Kontrolleri (Mobil Dokunmatik)
+        document.getElementById('left-btn').addEventListener('touchstart', () => moveLeft = true);
+        document.getElementById('left-btn').addEventListener('touchend', () => moveLeft = false);
+        document.getElementById('right-btn').addEventListener('touchstart', () => moveRight = true);
+        document.getElementById('right-btn').addEventListener('touchend', () => moveRight = false);
 
-            // Ekranın Sol/Sağ Tarafına Dokunma Kontrolleri
-            window.addEventListener('touchstart', function(e) {
-                if (gameState !== 'PLAYING') return;
-                e.preventDefault();
-                
-                const touchX = e.touches[0].clientX;
-                if (touchX < window.innerWidth / 2) {
-                    touchSide = 'LEFT';
-                } else {
-                    touchSide = 'RIGHT';
-                }
-            }, {passive: false});
+        // Bilgisayarda Denenirse Diye Fare Desteği
+        document.getElementById('left-btn').addEventListener('mousedown', () => moveLeft = true);
+        document.getElementById('left-btn').addEventListener('mouseup', () => moveLeft = false);
+        document.getElementById('right-btn').addEventListener('mousedown', () => moveRight = true);
+        document.getElementById('right-btn').addEventListener('mouseup', () => moveRight = false);
 
-            window.addEventListener('touchmove', function(e) {
-                if (gameState !== 'PLAYING') return;
-                e.preventDefault();
-                
-                const touchX = e.touches[0].clientX;
-                if (touchX < window.innerWidth / 2) {
-                    touchSide = 'LEFT';
-                } else {
-                    touchSide = 'RIGHT';
-                }
-            }, {passive: false});
-
-            window.addEventListener('touchend', function(e) {
-                if (gameState !== 'PLAYING') return;
-                e.preventDefault();
-                if (e.touches.length === 0) {
-                    touchSide = null;
-                }
-            }, {passive: false});
-
-            // Masaüstü Test Desteği (Fare ile tıklama)
-            window.addEventListener('mousedown', function(e) {
-                if (gameState !== 'PLAYING') return;
-                if (e.clientX < window.innerWidth / 2) touchSide = 'LEFT';
-                else touchSide = 'RIGHT';
-            });
-            window.addEventListener('mouseup', function() {
-                touchSide = null;
-            });
-
-
-            function update() {
-                if (gameState !== 'PLAYING') return;
-
+        function loop() {
+            if (gameState === 'PLAYING') {
                 // Halat Hareketi
-                if (touchSide === 'LEFT') platform.netX -= 5;
-                if (touchSide === 'RIGHT') platform.netX += 5;
-                
-                const maxOffset = platform.radius - 15;
-                if (platform.netX < platform.x - maxOffset) platform.netX = platform.x - maxOffset;
-                if (platform.netX > platform.x + maxOffset) platform.netX = platform.x + maxOffset;
+                if (moveLeft) platform.netX -= 4;
+                if (moveRight) platform.netX += 4;
 
-                // Yerçekimi
-                rocket.vy += GRAVITY;
-                
-                // Otomatik Ters İtiş (Yere yaklaşırken hız yüksekse motoru açar)
-                const distanceToNet = (platform.y - 30) - (rocket.y + rocket.height);
-                if (distanceToNet < 160 && rocket.vy > SAFE_SPEED && rocket.fuel > 0) {
+                // Sınırlar
+                if (platform.netX < platform.x - 45) platform.netX = platform.x - 45;
+                if (platform.netX > platform.x + 45) platform.netX = platform.x + 45;
+
+                // Fizik
+                rocket.vy += 0.08; // Yerçekimi
+
+                // Otomatik Ters İtiş Freni
+                let distance = (platform.y - 25) - (rocket.y + rocket.height);
+                if (distance < 120 && rocket.vy > 2.0) {
+                    rocket.vy -= 0.18;
                     rocket.isThrusting = true;
-                    rocket.vy -= THRUST_ACCEL;
-                    rocket.fuel -= 0.6;
                 } else {
                     rocket.isThrusting = false;
                 }
-                if (rocket.fuel < 0) rocket.fuel = 0;
 
                 rocket.x += rocket.vx;
                 rocket.y += rocket.vy;
 
-                // Duvarlardan Sekme
-                if (rocket.x < rocket.width || rocket.x > canvas.width - rocket.width) {
-                    rocket.vx *= -1;
-                }
+                // Duvar sekmesi
+                if (rocket.x < 10 || rocket.x > canvas.width - 10) rocket.vx *= -1;
 
-                // UI Güncelleme
-                if (speedVal) speedVal.innerText = Math.abs(rocket.vy * 5).toFixed(1);
-                if (fuelVal) fuelVal.innerText = Math.ceil(rocket.fuel);
-                
-                if (speedVal) {
-                    if (Math.abs(rocket.vy) <= SAFE_SPEED) speedVal.style.color = '#06d6a0';
-                    else speedVal.style.color = '#e63946';
-                }
-
-                // Yakalama Kontrolü
-                const netTopY = platform.y - 30;
-                if (rocket.y + rocket.height >= netTopY && rocket.y <= platform.y) {
-                    const halfNet = platform.netWidth / 2;
-                    if (rocket.x >= platform.netX - halfNet && rocket.x <= platform.netX + halfNet) {
-                        if (Math.abs(rocket.vy) <= SAFE_SPEED) {
-                            gameState = 'SUCCESS';
-                            score += 10;
-                            if (scoreVal) scoreVal.innerText = score;
-                            endGame("MÜKEMMEL!", "Halatlar roketi yakaladı. +10 Puan!", "#06d6a0");
+                // İniş kontrolü
+                let netTop = platform.y - 25;
+                if (rocket.y + rocket.height >= netTop && rocket.y <= platform.y) {
+                    if (rocket.x >= platform.netX - 20 && rocket.x <= platform.netX + 20) {
+                        if (rocket.vy <= 2.2) {
+                            finishGame("BAŞARILI!", "Roketi halatlarla güvenle yakaladın!", true);
                         } else {
-                            gameState = 'CRASH';
-                            endGame("ÇOK HIZLI!", "Hız yüksek olduğu için roket patladı.", "#e63946");
+                            finishGame("PATLAMA!", "Çok hızlı indiğin için roket çakıldı.", false);
                         }
                     }
                 }
 
-                // Denize Düşme Kontrolü
-                if (rocket.y + rocket.height >= platform.y + 10) {
-                    gameState = 'CRASH';
-                    endGame("DENİZE DÜŞTÜ!", "Platformu ıskaladın.", "#e63946");
+                // Iskalama
+                if (rocket.y + rocket.height > platform.y + 10) {
+                    finishGame("ISKADAN DENİZE!", "Halatları roketin altına yetiştiremedin.", false);
                 }
             }
 
-            function endGame(title, desc, color) {
-                if (msgTitle) { msgTitle.innerText = title; msgTitle.style.color = color; }
-                if (msgDesc) msgDesc.innerText = desc;
-                if (btnStart) btnStart.innerText = "YENİDEN DENE";
-                if (msgScreen) msgScreen.style.display = 'flex';
-            }
+            // Çizim İşlemleri
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            function draw() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Deniz ve Hava Ayrımı
+            ctx.fillStyle = '#1d3557';
+            ctx.fillRect(0, platform.y, canvas.width, canvas.height - platform.y);
 
-                // Gökyüzü
-                ctx.fillStyle = '#0b132b';
-                ctx.fillRect(0, 0, canvas.width, platform.y);
+            // Gemi Tabanı
+            ctx.fillStyle = '#4a5759';
+            ctx.fillRect(platform.x - 55, platform.y - 5, 110, 10);
 
-                // Deniz
-                ctx.fillStyle = '#1d3557';
-                ctx.fillRect(0, platform.y, canvas.width, canvas.height - platform.y);
+            // Yakalama Halat Direkleri
+            ctx.strokeStyle = '#8d99ae';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(platform.netX - 20, platform.y); ctx.lineTo(platform.netX - 20, platform.y - 30);
+            ctx.moveTo(platform.netX + 20, platform.y); ctx.lineTo(platform.netX + 20, platform.y - 30);
+            ctx.stroke();
 
-                // Dron Gemi Platformu (Görsel perspektif)
-                ctx.save();
-                ctx.translate(platform.x, platform.y);
-                ctx.scale(1, 0.3);
+            // Halat Çizgileri
+            ctx.strokeStyle = '#d8f3dc';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(platform.netX - 20, platform.y - 20); ctx.lineTo(platform.netX + 20, platform.y - 20);
+            ctx.moveTo(platform.netX - 20, platform.y - 10); ctx.lineTo(platform.netX + 20, platform.y - 10);
+            ctx.stroke();
+
+            // Roket Çizimi
+            if (gameState === 'PLAYING') {
+                ctx.fillStyle = '#e5e5e5';
+                ctx.fillRect(rocket.x - 6, rocket.y, rocket.width, rocket.height);
+
+                // Roket Ucu
+                ctx.fillStyle = '#118ab2';
                 ctx.beginPath();
-                ctx.arc(0, 0, platform.radius, 0, Math.PI * 2);
-                ctx.fillStyle = '#4a5759';
+                ctx.moveTo(rocket.x - 6, rocket.y); ctx.lineTo(rocket.x, rocket.y - 10); ctx.lineTo(rocket.x + 6, rocket.y);
                 ctx.fill();
-                ctx.lineWidth = 4;
-                ctx.strokeStyle = '#f1faee';
-                ctx.stroke();
-                ctx.restore();
 
-                // Yakalama Halat Direkleri ve Net
-                const pY = platform.y;
-                const nX = platform.netX;
-                const nW = platform.netWidth;
-                const poleH = 40;
-
-                ctx.lineWidth = 3;
-                ctx.strokeStyle = '#8d99ae';
-                ctx.beginPath(); ctx.moveTo(nX - nW/2, pY - 10); ctx.lineTo(nX - nW/2, pY - poleH); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(nX + nW/2, pY - 10); ctx.lineTo(nX + nW/2, pY - poleH); ctx.stroke();
-                
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = '#d8f3dc';
-                for (let i = 0; i < 3; i++) {
-                    let hY = (pY - poleH + 8) + (i * 8);
-                    ctx.beginPath(); ctx.moveTo(nX - nW/2, hY); ctx.lineTo(nX + nW/2, hY); ctx.stroke();
-                }
-
-                // Roket Çizimi
-                if (gameState === 'PLAYING' || gameState === 'SUCCESS') {
-                    ctx.save();
-                    ctx.translate(rocket.x, rocket.y);
-
-                    if (rocket.isThrusting && rocket.fuel > 0) {
-                        ctx.fillStyle = '#ffb703';
-                        ctx.beginPath();
-                        ctx.moveTo(-rocket.width/2, rocket.height);
-                        ctx.lineTo(0, rocket.height + Math.random() * 20 + 10);
-                        ctx.lineTo(rocket.width/2, rocket.height);
-                        ctx.closePath();
-                        ctx.fill();
-                    }
-
-                    ctx.fillStyle = '#e5e5e5';
-                    ctx.fillRect(-rocket.width/2, 0, rocket.width, rocket.height - 10);
-                    
-                    ctx.fillStyle = '#118ab2';
+                // Ateş Animasyonu
+                if (rocket.isThrusting) {
+                    ctx.fillStyle = '#ffb703';
                     ctx.beginPath();
-                    ctx.moveTo(-rocket.width/2, 0); ctx.lineTo(0, -12); ctx.lineTo(rocket.width/2, 0);
-                    ctx.closePath(); ctx.fill();
-
-                    ctx.fillStyle = '#f77f00';
-                    ctx.fillRect(-rocket.width/2 - 4, rocket.height - 18, 4, 8);
-                    ctx.fillRect(rocket.width/2, rocket.height - 18, 4, 8);
-
-                    ctx.restore();
+                    ctx.moveTo(rocket.x - 4, rocket.y + rocket.height);
+                    ctx.lineTo(rocket.x, rocket.y + rocket.height + 15);
+                    ctx.lineTo(rocket.x + 4, rocket.y + rocket.height);
+                    ctx.fill();
                 }
             }
 
-            function gameLoop() {
-                update();
-                draw();
-                requestAnimationFrame(gameLoop);
-            }
+            requestAnimationFrame(loop);
+        }
 
-            requestAnimationFrame(gameLoop);
-        })();
+        requestAnimationFrame(loop);
     </script>
 </body>
 </html>
