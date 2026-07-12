@@ -10,28 +10,24 @@
             user-select: none;
             -webkit-user-select: none;
             touch-action: none;
-        }
-        body {
             margin: 0;
             padding: 0;
+        }
+        body {
             background-color: #0d1b2a;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
             overflow: hidden;
-            color: #fff;
             width: 100vw;
             height: 100vh;
-        }
-        #game-container {
             position: relative;
-            width: 100vw;
-            height: 65vh;
-            background: linear-gradient(to bottom, #0b132b, #1c2541);
-            border-bottom: 6px solid #48cae4;
         }
-        canvas {
+        /* Sabit boyutlu statik alanlar yerine canvas tüm ekrana yayılacak */
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
             display: block;
-            width: 100%;
-            height: 100%;
+            z-index: 1;
         }
         #ui-overlay {
             position: absolute;
@@ -40,26 +36,32 @@
             right: 15px;
             display: flex;
             justify-content: space-between;
-            font-size: 14px;
+            font-size: 13px;
             pointer-events: none;
             z-index: 10;
         }
         .stat-box {
-            background: rgba(0, 0, 0, 0.7);
-            padding: 6px 12px;
+            background: rgba(11, 19, 43, 0.85);
+            padding: 6px 10px;
             border-radius: 6px;
             border: 1px solid #3a506b;
+            color: #fff;
             font-weight: bold;
         }
         #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
             width: 100vw;
-            height: 35vh;
+            height: 160px; /* Sabit piksel yüksekliği ile çakışma önlendi */
             background: #1c2541;
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
             grid-template-rows: 1fr 1fr;
-            gap: 12px;
-            padding: 15px;
+            gap: 10px;
+            padding: 12px;
+            z-index: 10;
+            border-top: 4px solid #3a506b;
         }
         .btn {
             background: #3a506b;
@@ -79,14 +81,14 @@
             grid-column: 1 / span 3;
             background: #e63946;
             box-shadow: 0 4px #b51726;
-            font-size: 20px;
+            font-size: 18px;
         }
         #msg-screen {
             position: absolute;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             background: rgba(11, 19, 43, 0.95);
             display: flex;
             flex-direction: column;
@@ -106,14 +108,14 @@
             font-size: 15px;
             margin-bottom: 25px;
             color: #cbd5e1;
-            max-width: 300px;
+            max-width: 280px;
             line-height: 1.4;
         }
         #btn-restart {
-            padding: 15px 45px;
+            padding: 14px 40px;
             background: #06d6a0;
             border: none;
-            border-radius: 30px;
+            border-radius: 25px;
             font-size: 18px;
             font-weight: bold;
             color: #0b132b;
@@ -124,20 +126,18 @@
 </head>
 <body>
 
-    <div id="game-container">
-        <canvas id="gameCanvas"></canvas>
-        
-        <div id="ui-overlay">
-            <div class="stat-box">Hız: <span id="speed-val">0</span> m/s</div>
-            <div class="stat-box">Yakıt: <span id="fuel-val">100</span>%</div>
-            <div class="stat-box">Skor: <span id="score-val">0</span></div>
-        </div>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-overlay">
+        <div class="stat-box">Hız: <span id="speed-val">0</span> m/s</div>
+        <div class="stat-box">Yakıt: <span id="fuel-val">100</span>%</div>
+        <div class="stat-box">Skor: <span id="score-val">0</span></div>
+    </div>
 
-        <div id="msg-screen">
-            <div id="msg-title">Dron Gemisi İnişi</div>
-            <div id="msg-desc">Halatları roketin rotasına çek ve ters itişle yavaşla! İniş hızı yeşil olmalı.</div>
-            <button id="btn-restart">OYUNA BAŞLA</button>
-        </div>
+    <div id="msg-screen">
+        <div id="msg-title">Dron Gemisi İnişi</div>
+        <div id="msg-desc">Halatları roketin rotasına çek ve ters itişle yavaşla! İniş hızı yeşil olmalı.</div>
+        <button id="btn-restart">OYUNA BAŞLA</button>
     </div>
 
     <div id="controls">
@@ -151,14 +151,19 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Mobil tarayıcılar için kesin çalışan boyutlandırma mantığı
-        function resizeCanvas() {
+        // Mobil tarayıcılardaki 0px yükseklik hatasını ezen kesin çözüm
+        function resizeGame() {
             canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight * 0.65;
+            // Canvas boyutu butonların üst sınırına kadar ayarlanıyor
+            canvas.height = window.innerHeight - 160; 
+            
+            // Konumları ekran boyutuna göre dinamik güncelle
+            platform.y = canvas.height - 30;
+            if (gameState === 'START') {
+                platform.x = canvas.width / 2;
+                platform.netX = platform.x;
+            }
         }
-        resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
-        window.addEventListener('orientationchange', resizeCanvas);
 
         let score = 0;
         let gameState = 'START'; 
@@ -168,7 +173,7 @@
         const SAFE_SPEED = 2.5;
 
         let rocket = { x: 0, y: 0, vx: 0, vy: 0, width: 14, height: 45, fuel: 100, isThrusting: false };
-        let platform = { x: 0, y: 0, radius: 65, netWidth: 40, netX: 0 };
+        let platform = { x: window.innerWidth / 2, y: 300, radius: 65, netWidth: 42, netX: window.innerWidth / 2 };
 
         let moveLeft = false;
         let moveRight = false;
@@ -185,13 +190,14 @@
         const fuelVal = document.getElementById('fuel-val');
         const scoreVal = document.getElementById('score-val');
 
-        function initGame() {
-            resizeCanvas();
-            
-            platform.y = canvas.height - 40;
-            platform.x = canvas.width / 2;
-            platform.netX = platform.x;
+        // İlk boyutlandırmayı yap
+        resizeGame();
+        window.addEventListener('resize', resizeGame);
+        window.addEventListener('orientationchange', resizeGame);
 
+        function initGame() {
+            resizeGame();
+            
             rocket.x = Math.random() * (canvas.width - 60) + 30;
             rocket.y = 30;
             rocket.vx = (Math.random() - 0.5) * 2;
@@ -203,7 +209,7 @@
             msgScreen.style.display = 'none';
         }
 
-        // Oyun Kontrolleri (Mobil Dokunmatik + Masaüstü Mouse)
+        // Mobil Dokunmatik + Masaüstü Mouse Dinleyicileri (Kesin Kararlı Hibrit Yapı)
         btnThrust.addEventListener('touchstart', (e) => { e.preventDefault(); rocket.isThrusting = true; }, {passive: false});
         btnThrust.addEventListener('touchend', (e) => { e.preventDefault(); rocket.isThrusting = false; }, {passive: false});
         btnThrust.addEventListener('mousedown', () => { rocket.isThrusting = true; });
@@ -219,21 +225,9 @@
         btnRight.addEventListener('mousedown', () => { moveRight = true; });
         btnRight.addEventListener('mouseup', () => { moveRight = false; });
 
-        // Başlat Butonu Tetikleyicisi
+        // Açılış Butonu Kilit Çözücü
         btnRestart.addEventListener('click', initGame);
         btnRestart.addEventListener('touchstart', (e) => { e.preventDefault(); initGame(); }, {passive: false});
-
-        // Masaüstü Klavye Desteği
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowUp' || e.key === ' ') rocket.isThrusting = true;
-            if (e.key === 'ArrowLeft') moveLeft = true;
-            if (e.key === 'ArrowRight') moveRight = true;
-        });
-        window.addEventListener('keyup', (e) => {
-            if (e.key === 'ArrowUp' || e.key === ' ') rocket.isThrusting = false;
-            if (e.key === 'ArrowLeft') moveLeft = false;
-            if (e.key === 'ArrowRight') moveRight = false;
-        });
 
         function update() {
             if (gameState !== 'PLAYING') return;
@@ -301,20 +295,20 @@
         }
 
         function draw() {
+            // Açılış ekranında bile olsak arka planı temizle ve çizimi başlat
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Değerler atanmadıysa ilk açılış için varsayılan ata
-            const currentPlatformY = platform.y || (canvas.height - 40);
-            const currentPlatformX = platform.x || (canvas.width / 2);
-            const currentNetX = gameState === 'START' ? currentPlatformX : platform.netX;
+            // Gelişmiş Uzay/Gökyüzü Arka Planı (Canvas üst alanı)
+            ctx.fillStyle = '#0b132b';
+            ctx.fillRect(0, 0, canvas.width, platform.y);
 
             // 1. Deniz Suyu
             ctx.fillStyle = '#1d3557';
-            ctx.fillRect(0, currentPlatformY, canvas.width, canvas.height - currentPlatformY);
+            ctx.fillRect(0, platform.y, canvas.width, canvas.height - platform.y);
 
-            // 2. Dron Gemi Platformu
+            // 2. Dron Gemi Platformu (Perspektif Daire)
             ctx.save();
-            ctx.translate(currentPlatformX, currentPlatformY);
+            ctx.translate(platform.x, platform.y);
             ctx.scale(1, 0.3); 
             ctx.beginPath();
             ctx.arc(0, 0, platform.radius, 0, Math.PI * 2);
@@ -325,9 +319,9 @@
             ctx.stroke();
             ctx.restore();
 
-            // 3. Direkler ve Halatlar
-            const pY = currentPlatformY;
-            const nX = currentNetX;
+            // 3. Direkler ve Hareketli Halat Mekanizması
+            const pY = platform.y;
+            const nX = platform.netX;
             const nW = platform.netWidth;
             const poleH = 40; 
 
@@ -347,7 +341,7 @@
             ctx.beginPath(); ctx.moveTo(nX - nW/2 + 5, pY); ctx.lineTo(nX - nW/2 + 5, pY - poleH + 10); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(nX + nW/2 - 5, pY); ctx.lineTo(nX + nW/2 - 5, pY - poleH + 10); ctx.stroke();
 
-            // 4. Roket Çizimi
+            // 4. Aktif Roket Çizimi
             if (gameState === 'PLAYING' || gameState === 'SUCCESS') {
                 ctx.save();
                 ctx.translate(rocket.x, rocket.y);
@@ -384,7 +378,7 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // Döngüyü anında başlat
+        // Oyun döngüsünü hemen tetikle
         requestAnimationFrame(gameLoop);
     </script>
 </body>
