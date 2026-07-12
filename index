@@ -21,7 +21,6 @@
             height: 100vh;
             position: relative;
         }
-        /* Sabit boyutlu statik alanlar yerine canvas tüm ekrana yayılacak */
         #gameCanvas {
             position: absolute;
             top: 0;
@@ -53,7 +52,7 @@
             bottom: 0;
             left: 0;
             width: 100vw;
-            height: 160px; /* Sabit piksel yüksekliği ile çakışma önlendi */
+            height: 160px;
             background: #1c2541;
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
@@ -151,20 +150,6 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Mobil tarayıcılardaki 0px yükseklik hatasını ezen kesin çözüm
-        function resizeGame() {
-            canvas.width = window.innerWidth;
-            // Canvas boyutu butonların üst sınırına kadar ayarlanıyor
-            canvas.height = window.innerHeight - 160; 
-            
-            // Konumları ekran boyutuna göre dinamik güncelle
-            platform.y = canvas.height - 30;
-            if (gameState === 'START') {
-                platform.x = canvas.width / 2;
-                platform.netX = platform.x;
-            }
-        }
-
         let score = 0;
         let gameState = 'START'; 
         
@@ -172,8 +157,9 @@
         const THRUST_ACCEL = 0.32;
         const SAFE_SPEED = 2.5;
 
+        // Nesneleri globalde boş başlatıp resize içinde güvenli değerlerle dolduruyoruz
         let rocket = { x: 0, y: 0, vx: 0, vy: 0, width: 14, height: 45, fuel: 100, isThrusting: false };
-        let platform = { x: window.innerWidth / 2, y: 300, radius: 65, netWidth: 42, netX: window.innerWidth / 2 };
+        let platform = { x: 0, y: 0, radius: 65, netWidth: 42, netX: 0 };
 
         let moveLeft = false;
         let moveRight = false;
@@ -190,7 +176,20 @@
         const fuelVal = document.getElementById('fuel-val');
         const scoreVal = document.getElementById('score-val');
 
-        // İlk boyutlandırmayı yap
+        function resizeGame() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight - 160; 
+            
+            // Platform konumunu garanti altına alıyoruz
+            platform.y = canvas.height - 30;
+            platform.x = canvas.width / 2;
+            
+            if (gameState === 'START') {
+                platform.netX = platform.x;
+            }
+        }
+
+        // İlk boyutlandırmayı hemen yap
         resizeGame();
         window.addEventListener('resize', resizeGame);
         window.addEventListener('orientationchange', resizeGame);
@@ -209,7 +208,7 @@
             msgScreen.style.display = 'none';
         }
 
-        // Mobil Dokunmatik + Masaüstü Mouse Dinleyicileri (Kesin Kararlı Hibrit Yapı)
+        // Event Listeners
         btnThrust.addEventListener('touchstart', (e) => { e.preventDefault(); rocket.isThrusting = true; }, {passive: false});
         btnThrust.addEventListener('touchend', (e) => { e.preventDefault(); rocket.isThrusting = false; }, {passive: false});
         btnThrust.addEventListener('mousedown', () => { rocket.isThrusting = true; });
@@ -225,7 +224,6 @@
         btnRight.addEventListener('mousedown', () => { moveRight = true; });
         btnRight.addEventListener('mouseup', () => { moveRight = false; });
 
-        // Açılış Butonu Kilit Çözücü
         btnRestart.addEventListener('click', initGame);
         btnRestart.addEventListener('touchstart', (e) => { e.preventDefault(); initGame(); }, {passive: false});
 
@@ -295,18 +293,17 @@
         }
 
         function draw() {
-            // Açılış ekranında bile olsak arka planı temizle ve çizimi başlat
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Gelişmiş Uzay/Gökyüzü Arka Planı (Canvas üst alanı)
+            // Uzay/Gökyüzü Arka Planı
             ctx.fillStyle = '#0b132b';
             ctx.fillRect(0, 0, canvas.width, platform.y);
 
-            // 1. Deniz Suyu
+            // Deniz Suyu
             ctx.fillStyle = '#1d3557';
             ctx.fillRect(0, platform.y, canvas.width, canvas.height - platform.y);
 
-            // 2. Dron Gemi Platformu (Perspektif Daire)
+            // Dron Gemi Platformu
             ctx.save();
             ctx.translate(platform.x, platform.y);
             ctx.scale(1, 0.3); 
@@ -319,7 +316,7 @@
             ctx.stroke();
             ctx.restore();
 
-            // 3. Direkler ve Hareketli Halat Mekanizması
+            // Direkler ve Hareketli Halat Mekanizması
             const pY = platform.y;
             const nX = platform.netX;
             const nW = platform.netWidth;
@@ -337,11 +334,7 @@
                 ctx.beginPath(); ctx.moveTo(nX - nW/2, hY); ctx.lineTo(nX + nW/2, hY); ctx.stroke();
             }
 
-            ctx.strokeStyle = '#b7b7a4';
-            ctx.beginPath(); ctx.moveTo(nX - nW/2 + 5, pY); ctx.lineTo(nX - nW/2 + 5, pY - poleH + 10); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(nX + nW/2 - 5, pY); ctx.lineTo(nX + nW/2 - 5, pY - poleH + 10); ctx.stroke();
-
-            // 4. Aktif Roket Çizimi
+            // Aktif Roket Çizimi
             if (gameState === 'PLAYING' || gameState === 'SUCCESS') {
                 ctx.save();
                 ctx.translate(rocket.x, rocket.y);
@@ -378,7 +371,6 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // Oyun döngüsünü hemen tetikle
         requestAnimationFrame(gameLoop);
     </script>
 </body>
