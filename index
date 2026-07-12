@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Deniz Üstü Roket Yakalama Simülatörü</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0d1b2a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            height: 70vh;
+            background: linear-gradient(to bottom, #0b132b, #1c2541);
+            overflow: hidden;
+            border-bottom: 8px solid #48cae4; /* Deniz yüzeyi çizgisi */
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            pointer-events: none;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+        }
+        .stat-box {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            border: 1px solid #3a506b;
+        }
+        #controls {
+            width: 100%;
+            max-width: 500px;
+            height: 30vh;
+            background: #1c2541;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 10px;
+            padding: 15px;
+        }
+        .btn {
+            background: #3a506b;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: bold;
+            active-background: #5bc0be;
+            box-shadow: 0 4px #243346;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+        }
+        .btn:active {
+            background: #5bc0be;
+            box-shadow: 0 2px #243346;
+            transform: translateY(2px);
+        }
+        #btn-thrust {
+            grid-column: 1 / span 3;
+            background: #e63946;
+            box-shadow: 0 4px #b51726;
+            font-size: 22px;
+        }
+        #btn-thrust:active {
+            background: #ff4d6d;
+        }
+        #msg-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(11, 19, 43, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+        }
+        #msg-title {
+            font-size: 28px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        #msg-desc {
+            font-size: 16px;
+            margin-bottom: 20px;
+            color: #cbd5e1;
+        }
+        #btn-restart {
+            padding: 12px 30px;
+            background: #06d6a0;
+            border: none;
+            border-radius: 25px;
+            color: #0b132b;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="ui-overlay">
+            <div class="stat-box">Hız: <span id="speed-val">0</span> m/s</div>
+            <div class="stat-box">Yakıt: <span id="fuel-val">100</span>%</div>
+            <div class="stat-box">Skor: <span id="score-val">0</span></div>
+        </div>
+
+        <div id="msg-screen">
+            <div id="msg-title">Dron Gemisi İnişi</div>
+            <div id="msg-desc">Halatları roketin rotasına çek ve ters itişle yavaşla! Hızın yeşil bölgede olmalı.</div>
+            <button id="btn-restart">OYUNA BAŞLA</button>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button class="btn" id="btn-thrust">TERS İTİŞ (THRUST)</button>
+        <button class="btn" id="btn-left">◀ HALAT SOL</button>
+        <div></div> <!-- Boşluk -->
+        <button class="btn" id="btn-right">HALAT SAĞ ▶</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('game-container');
+
+        // Mobil için canvas boyutlandırma
+        function resizeCanvas() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Oyun Değişkenleri
+        let score = 0;
+        let gameState = 'START'; // START, PLAYING, SUCCESS, CRASH
+        
+        // Fizik Sabitleri
+        const GRAVITY = 0.15;
+        const THRUST_ACCEL = 0.35;
+        const SAFE_SPEED = 2.5;
+
+        // Nesne Tanımlamaları
+        let rocket = {
+            x: 0, y: 0,
+            vx: 0, vy: 0,
+            width: 14, height: 45,
+            fuel: 100,
+            isThrusting: false
+        };
+
+        let platform = {
+            x: 0, // Merkez X koordinatı
+            y: 0, // Sabit Y (Deniz seviyesi üstü)
+            radius: 65, // Daire platform yarıçapı
+            netWidth: 40, // Direkler arası kare genişliği
+            netX: 0 // Çelik halat mekanizmasının anlık X konumu
+        };
+
+        // Kontrol Durumları
+        let moveLeft = false;
+        let moveRight = false;
+
+        // Buton Elementleri
+        const btnThrust = document.getElementById('btn-thrust');
+        const btnLeft = document.getElementById('btn-left');
+        const btnRight = document.getElementById('btn-right');
+        const btnRestart = document.getElementById('btn-restart');
+        const msgScreen = document.getElementById('msg-screen');
+        const msgTitle = document.getElementById('msg-title');
+        const msgDesc = document.getElementById('msg-desc');
+
+        // Skor ve UI Güncelleme Elementleri
+        const speedVal = document.getElementById('speed-val');
+        const fuelVal = document.getElementById('fuel-val');
+        const scoreVal = document.getElementById('score-val');
+
+        // Oyun Sıfırlama / Başlatma fonksiyonu
+        function initGame() {
+            rocket.x = Math.random() * (canvas.width - 60) + 30;
+            rocket.y = 30;
+            rocket.vx = (Math.random() - 0.5) * 3;
+            rocket.vy = 1;
+            rocket.fuel = 100;
+            rocket.isThrusting = false;
+
+            platform.y = canvas.height - 40;
+            platform.x = canvas.width / 2;
+            platform.netX = platform.x; // Ortada başlasın
+
+            gameState = 'PLAYING';
+            msgScreen.style.display = 'none';
+        }
+
+        // Dokunmatik Kontrol Atamaları (Mobil için active/end dinleyicileri)
+        btnThrust.addEventListener('touchstart', (e) => { e.preventDefault(); rocket.isThrusting = true; });
+        btnThrust.addEventListener('touchend', () => rocket.isThrusting = false);
+        btnThrust.addEventListener('mousedown', () => rocket.isThrusting = true);
+        btnThrust.addEventListener('mouseup', () => rocket.isThrusting = false);
+
+        btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); moveLeft = true; });
+        btnLeft.addEventListener('touchend', () => moveLeft = false);
+        btnLeft.addEventListener('mousedown', () => moveLeft = true);
+        btnLeft.addEventListener('mouseup', () => moveLeft = false);
+
+        btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); moveRight = true; });
+        btnRight.addEventListener('touchend', () => moveRight = false);
+        btnRight.addEventListener('mousedown', () => moveRight = true);
+        btnRight.addEventListener('mouseup', () => moveRight = false);
+
+        btnRestart.addEventListener('click', initGame);
+
+        // Klavye Desteği (Bilgisayarda test etmek istersen)
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp' || e.key === ' ') rocket.isThrusting = true;
+            if (e.key === 'ArrowLeft') moveLeft = true;
+            if (e.key === 'ArrowRight') moveRight = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowUp' || e.key === ' ') rocket.isThrusting = false;
+            if (e.key === 'ArrowLeft') moveLeft = false;
+            if (e.key === 'ArrowRight') moveRight = false;
+        });
+
+        // Ana Döngü Güncelleme Adımı
+        function update() {
+            if (gameState !== 'PLAYING') return;
+
+            // Halat mekanizmasının hareketi (Sınırlandırma dahilinde)
+            if (moveLeft) platform.netX -= 4;
+            if (moveRight) platform.netX += 4;
+            
+            // Halatlar platform dışına çok taşmasın
+            const maxOffset = platform.radius - 15;
+            if (platform.netX < platform.x - maxOffset) platform.netX = platform.x - maxOffset;
+            if (platform.netX > platform.x + maxOffset) platform.netX = platform.x + maxOffset;
+
+            // Roket Fiziği
+            rocket.vy += GRAVITY;
+            
+            if (rocket.isThrusting && rocket.fuel > 0) {
+                rocket.vy -= THRUST_ACCEL;
+                rocket.fuel -= 0.6;
+                if (rocket.fuel < 0) rocket.fuel = 0;
+            }
+
+            rocket.x += rocket.vx;
+            rocket.y += rocket.vy;
+
+            // Duvarlardan sekme/sınır kontrolü
+            if (rocket.x < 0 || rocket.x > canvas.width) {
+                rocket.vx *= -1;
+            }
+
+            // Arayüz verilerini güncelleme
+            speedVal.innerText = Math.abs(rocket.vy * 5).toFixed(1);
+            fuelVal.innerText = Math.ceil(rocket.fuel);
+            
+            // Hız göstergesini güvenli limit rengine göre ayarla
+            if (Math.abs(rocket.vy) <= SAFE_SPEED) {
+                speedVal.style.color = '#06d6a0';
+            } else {
+                speedVal.style.color = '#e63946';
+            }
+
+            // Halat Seviyesine İniş Kontrolü (Yakalama Mekanizması)
+            // Halatların dikey konumu direklerin orta seviyesindedir (yaklaşık platform.y - 25)
+            const netTopY = platform.y - 30; 
+            
+            if (rocket.y + rocket.height >= netTopY && rocket.y <= platform.y) {
+                // Roketin yatayda halatların arasında olup olmadığının kontrolü
+                const halfNet = platform.netWidth / 2;
+                if (rocket.x >= platform.netX - halfNet && rocket.x <= platform.netX + halfNet) {
+                    
+                    // Yakalama şartı: Hız güvenli limitin altındaysa başarılı
+                    if (Math.abs(rocket.vy) <= SAFE_SPEED) {
+                        gameState = 'SUCCESS';
+                        score += 10;
+                        scoreVal.innerText = score;
+                        endGame("MÜKEMMEL YAKALAMA!", "Halatlar roketi güvenle kavradı. +10 Puan!", "#06d6a0");
+                    } else {
+                        gameState = 'CRASH';
+                        endGame("ÇOK HIZLI GELDİN!", "Hızın yüksek olduğu için halatlar koptu ve roket patladı.", "#e63946");
+                    }
+                }
+            }
+
+            // Denize veya platform zeminine çakılma kontrolü
+            if (rocket.y + rocket.height >= platform.y + 10) {
+                gameState = 'CRASH';
+                endGame("ÇAKILMA!", "Platformu veya halatları ıskalayarak denize düştün.", "#e63946");
+            }
+        }
+
+        function endGame(title, desc, color) {
+            msgTitle.innerText = title;
+            msgTitle.style.color = color;
+            msgDesc.innerText = desc;
+            btnRestart.innerText = "YENİDEN DENE";
+            msgScreen.style.display = 'flex';
+        }
+
+        // Çizim İşlemleri
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Arka Plandaki Deniz Suyu Efekti
+            ctx.fillStyle = '#1d3557';
+            ctx.fillRect(0, platform.y, canvas.width, canvas.height - platform.y);
+
+            // 2. Yuvarlak Dron Gemi Platformu Tabanı
+            ctx.save();
+            ctx.translate(platform.x, platform.y);
+            ctx.scale(1, 0.3); // Perspektif için daireyi basıklaştırıyoruz
+            ctx.beginPath();
+            ctx.arc(0, 0, platform.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#4a5759';
+            ctx.fill();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#f1faee';
+            ctx.stroke();
+            ctx.restore();
+
+            // 3. Sabit Platform Üstündeki 4 Direk Sistemi (Kare düzeni simülasyonu)
+            const pY = platform.y;
+            const nX = platform.netX;
+            const nW = platform.netWidth;
+            const poleH = 40; // Direk boyu
+
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#8d99ae';
+
+            // Sol ve Sağ Ana Taşıyıcı Ray Direkleri (Kare matrisi temsilen hareketli halat yatağı)
+            // Arka Sol Direk
+            ctx.beginPath(); ctx.moveTo(nX - nW/2, pY - 10); ctx.lineTo(nX - nW/2, pY - poleH); ctx.stroke();
+            // Arka Sağ Direk
+            ctx.beginPath(); ctx.moveTo(nX + nW/2, pY - 10); ctx.lineTo(nX + nW/2, pY - poleH); ctx.stroke();
+            
+            // 4. Oyuncunun Hareket Ettirdiği Gerilmiş Çelik Halatlar
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#d8f3dc';
+            // Yatay gergin çelik halatlar (Roketi yakalayacak ağ örüntüsü)
+            for (let i = 0; i < 3; i++) {
+                let hY = (pY - poleH + 8) + (i * 8);
+                ctx.beginPath();
+                ctx.moveTo(nX - nW/2, hY);
+                ctx.lineTo(nX + nW/2, hY);
+                ctx.stroke();
+            }
+
+            // Ön Direkler (Görsel derinlik katması için halatların önüne çiziyoruz)
+            ctx.strokeStyle = '#b7b7a4';
+            ctx.beginPath(); ctx.moveTo(nX - nW/2 + 5, pY); ctx.lineTo(nX - nW/2 + 5, pY - poleH + 10); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(nX + nW/2 - 5, pY); ctx.lineTo(nX + nW/2 - 5, pY - poleH + 10); ctx.stroke();
+
+            // 5. Roket Çizimi
+            ctx.save();
+            ctx.translate(rocket.x, rocket.y);
+
+            // İtiş Alevi
+            if (rocket.isThrusting && rocket.fuel > 0 && gameState === 'PLAYING') {
+                ctx.fillStyle = '#ffb703';
+                ctx.beginPath();
+                ctx.moveTo(-rocket.width/2, rocket.height);
+                ctx.lineTo(0, rocket.height + Math.random() * 25 + 10);
+                ctx.lineTo(rocket.width/2, rocket.height);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.fillStyle = '#fb8500';
+                ctx.beginPath();
+                ctx.moveTo(-rocket.width/4, rocket.height);
+                ctx.lineTo(0, rocket.height + Math.random() * 15 + 5);
+                ctx.lineTo(rocket.width/4, rocket.height);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Roket Gövdesi
+            ctx.fillStyle = '#e5e5e5';
+            ctx.fillRect(-rocket.width/2, 0, rocket.width, rocket.height - 10);
+            
+            // Roket Burnu (Üçgen kafalık)
+            ctx.fillStyle = '#118ab2';
+            ctx.beginPath();
+            ctx.moveTo(-rocket.width/2, 0);
+            ctx.lineTo(0, -12);
+            ctx.lineTo(rocket.width/2, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            // Roket Kanatçıkları (Grid fins & Landing legs temsili)
+            ctx.fillStyle = '#f77f00';
+            ctx.fillRect(-rocket.width/2 - 4, rocket.height - 18, 4, 8);
+            ctx.fillRect(rocket.width/2, rocket.height - 18, 4, 8);
+
+            ctx.restore();
+        }
+
+        // Oyun Döngüsü (Loop)
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Döngüyü Başlat
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
