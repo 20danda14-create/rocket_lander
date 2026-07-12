@@ -19,28 +19,14 @@
             overflow: hidden;
             width: 100vw;
             height: 100vh;
-        }
-        /* Canlı Hata Loglama Ekranı (Eğer kodda bir şey çökerse burası devreye girecek) */
-        #error-log {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            background: #ff3333;
-            color: white;
-            padding: 10px;
-            font-family: monospace;
-            font-size: 12px;
-            z-index: 9999;
-            display: none;
-            word-break: break-all;
-            max-height: 30vh;
-            overflow-y: auto;
+            position: relative;
         }
         #gameCanvas {
             position: absolute;
             top: 0;
             left: 0;
+            width: 100%;
+            height: calc(100vh - 160px);
             display: block;
             z-index: 1;
         }
@@ -142,13 +128,11 @@
             font-weight: bold;
             color: #0b132b;
             box-shadow: 0 4px #049f76;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
-
-    <!-- Canlı Hata Penceresi -->
-    <div id="error-log"></div>
 
     <canvas id="gameCanvas"></canvas>
     
@@ -175,18 +159,7 @@
     </div>
 
     <script>
-        // Cihazda olası bir JS hatasını anında ekrana basacak can simidi mekanizması
-        window.onerror = function(msg, url, line) {
-            const log = document.getElementById('error-log');
-            if (log) {
-                log.style.display = 'block';
-                log.innerHTML += `<div><strong>Hata:</strong> ${msg} <br> <strong>Satır:</strong> ${line}</div>`;
-            }
-            return false;
-        };
-
-        // Tüm DOM ve pencereler tamamen yüklendiğinde çalışmayı garanti et
-        window.onload = function() {
+        function runGameEngine() {
             const canvas = document.getElementById('gameCanvas');
             const ctx = canvas.getContext('2d');
 
@@ -216,9 +189,8 @@
             const scoreVal = document.getElementById('score-val');
 
             function resizeGame() {
-                // Tarayıcı genişlik değerlerini sağlama al, asla 0 veya NaN olmasınlar
-                const w = Math.max(320, window.innerWidth);
-                const h = Math.max(400, window.innerHeight);
+                const w = window.innerWidth > 0 ? window.innerWidth : screen.width;
+                const h = window.innerHeight > 0 ? window.innerHeight : screen.height;
 
                 canvas.width = w;
                 canvas.height = h - 160; 
@@ -233,26 +205,22 @@
                 }
             }
 
-            // İlk boyutlandırma tetiklemesi
             resizeGame();
             window.addEventListener('resize', resizeGame);
             window.addEventListener('orientationchange', resizeGame);
 
             function initGame() {
                 resizeGame();
-                
                 rocket.x = Math.random() * (canvas.width - 60) + 30;
                 rocket.y = 30;
                 rocket.vx = (Math.random() - 0.5) * 2;
                 rocket.vy = 0.5;
                 rocket.fuel = 100;
                 rocket.isThrusting = false;
-
                 gameState = 'PLAYING';
                 msgScreen.style.display = 'none';
             }
 
-            // Dokunmatik Event Kontrolleri (Mobil Safari / Chrome uyumlu)
             btnThrust.addEventListener('touchstart', function(e) { e.preventDefault(); rocket.isThrusting = true; }, {passive: false});
             btnThrust.addEventListener('touchend', function(e) { e.preventDefault(); rocket.isThrusting = false; }, {passive: false});
             btnThrust.addEventListener('mousedown', function() { rocket.isThrusting = true; });
@@ -296,7 +264,6 @@
                     rocket.vx *= -1;
                 }
 
-                // UI Değer Güncellemeleri
                 if (speedVal) speedVal.innerText = Math.abs(rocket.vy * 5).toFixed(1);
                 if (fuelVal) fuelVal.innerText = Math.ceil(rocket.fuel);
                 
@@ -341,15 +308,12 @@
             function draw() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                // Gökyüzü Arka Planı
                 ctx.fillStyle = '#0b132b';
                 ctx.fillRect(0, 0, canvas.width, Math.max(0, platform.y));
 
-                // Deniz Suyu
                 ctx.fillStyle = '#1d3557';
                 ctx.fillRect(0, platform.y, canvas.width, Math.max(0, canvas.height - platform.y));
 
-                // Dron Gemi Platformu (Geliştirilmiş Güvenli Çizim)
                 ctx.save();
                 ctx.translate(platform.x, platform.y);
                 ctx.scale(1, 0.3); 
@@ -362,7 +326,6 @@
                 ctx.stroke();
                 ctx.restore();
 
-                // Direkler ve Hareketli Halat Mekanizması
                 const pY = platform.y;
                 const nX = platform.netX;
                 const nW = platform.netWidth;
@@ -380,7 +343,6 @@
                     ctx.beginPath(); ctx.moveTo(nX - nW/2, hY); ctx.lineTo(nX + nW/2, hY); ctx.stroke();
                 }
 
-                // Aktif Roket Çizimi
                 if (gameState === 'PLAYING' || gameState === 'SUCCESS') {
                     ctx.save();
                     ctx.translate(rocket.x, rocket.y);
@@ -417,9 +379,15 @@
                 requestAnimationFrame(gameLoop);
             }
 
-            // Döngüyü başlat
             requestAnimationFrame(gameLoop);
-        };
+        }
+
+        // DOM Yüklenme Durumuna Bağlı Kalmaksızın Tetikleme Garantisi
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', runGameEngine);
+        } else {
+            runGameEngine();
+        }
     </script>
 </body>
 </html>
