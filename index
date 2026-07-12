@@ -9,27 +9,21 @@
             box-sizing: border-box;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: none; /* Ekranın kaymasını ve zoom yapmasını tamamen engeller */
+            touch-action: none;
         }
         body {
             margin: 0;
             padding: 0;
             background-color: #0d1b2a;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Arial, sans-serif;
             overflow: hidden;
             color: #fff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            height: 100vh;
         }
         #game-container {
             position: relative;
-            width: 100%;
-            max-width: 500px;
+            width: 100vw;
             height: 65vh;
             background: linear-gradient(to bottom, #0b132b, #1c2541);
-            overflow: hidden;
             border-bottom: 8px solid #48cae4;
         }
         canvas {
@@ -46,18 +40,15 @@
             justify-content: space-between;
             font-size: 14px;
             pointer-events: none;
-            text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
             z-index: 10;
         }
         .stat-box {
             background: rgba(0, 0, 0, 0.6);
             padding: 5px 10px;
             border-radius: 5px;
-            border: 1px solid #3a506b;
         }
         #controls {
-            width: 100%;
-            max-width: 500px;
+            width: 100vw;
             height: 35vh;
             background: #1c2541;
             display: grid;
@@ -65,7 +56,6 @@
             grid-template-rows: 1fr 1fr;
             gap: 10px;
             padding: 15px;
-            z-index: 10;
         }
         .btn {
             background: #3a506b;
@@ -74,20 +64,13 @@
             border-radius: 12px;
             font-size: 18px;
             font-weight: bold;
-            box-shadow: 0 4px #243346;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
         .btn:active {
             background: #5bc0be;
-            box-shadow: 0 2px #243346;
-            transform: translateY(2px);
         }
         #btn-thrust {
             grid-column: 1 / span 3;
             background: #e63946;
-            box-shadow: 0 4px #b51726;
             font-size: 22px;
         }
         #msg-screen {
@@ -96,7 +79,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(11, 19, 43, 0.9);
+            background: rgba(11, 19, 43, 0.95);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -108,28 +91,21 @@
         #msg-title {
             font-size: 28px;
             margin-bottom: 10px;
-            font-weight: bold;
             color: #06d6a0;
         }
         #msg-desc {
             font-size: 16px;
             margin-bottom: 25px;
             color: #cbd5e1;
-            line-height: 1.4;
         }
         #btn-restart {
             padding: 15px 40px;
             background: #06d6a0;
             border: none;
             border-radius: 30px;
-            color: #0b132b;
             font-size: 20px;
             font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 4px #049f76;
-        }
-        #btn-restart:active {
-            transform: scale(0.98);
+            color: #0b132b;
         }
     </style>
 </head>
@@ -164,16 +140,12 @@
         const container = document.getElementById('game-container');
 
         function resizeCanvas() {
-            canvas.width = container.clientWidth;
-            canvas.height = container.clientHeight;
+            canvas.width = container.getBoundingClientRect().width || window.innerWidth;
+            canvas.height = container.getBoundingClientRect().height || (window.innerHeight * 0.65);
         }
+        
+        // İlk kurulum
         resizeCanvas();
-        // Sayfa yüklendiğinde boyutların tam oturması için kısa bir gecikme ekliyoruz
-        window.addEventListener('load', () => {
-            resizeCanvas();
-            // İlk kareyi çiz ki oyun başlamadan önce arka plan boş kalmasın
-            drawStaticBackground();
-        });
         window.addEventListener('resize', resizeCanvas);
 
         let score = 0;
@@ -203,6 +175,11 @@
 
         function initGame() {
             resizeCanvas();
+            
+            platform.y = canvas.height - 40;
+            platform.x = canvas.width / 2;
+            platform.netX = platform.x;
+
             rocket.x = Math.random() * (canvas.width - 60) + 30;
             rocket.y = 30;
             rocket.vx = (Math.random() - 0.5) * 3;
@@ -210,41 +187,29 @@
             rocket.fuel = 100;
             rocket.isThrusting = false;
 
-            platform.y = canvas.height - 40;
-            platform.x = canvas.width / 2;
-            platform.netX = platform.x;
-
             gameState = 'PLAYING';
             msgScreen.style.display = 'none';
         }
 
-        // Hem dokunma (tıklama) hem de mouse olaylarını birleştiren hibrit dinleyiciler
-        function setupButton(button, startFn, endFn) {
-            button.addEventListener('touchstart', (e) => { e.preventDefault(); startFn(); }, { passive: false });
-            button.addEventListener('touchend', (e) => { e.preventDefault(); endFn(); }, { passive: false });
-            button.addEventListener('mousedown', startFn);
-            button.addEventListener('mouseup', endFn);
-            button.addEventListener('mouseleave', endFn);
-        }
+        // Event Dinleyicileri
+        btnThrust.addEventListener('touchstart', (e) => { e.preventDefault(); rocket.isThrusting = true; }, {passive: false});
+        btnThrust.addEventListener('touchend', (e) => { e.preventDefault(); rocket.isThrusting = false; }, {passive: false});
+        btnThrust.addEventListener('mousedown', () => { rocket.isThrusting = true; });
+        btnThrust.addEventListener('mouseup', () => { rocket.isThrusting = false; });
 
-        setupButton(btnThrust, () => { rocket.isThrusting = true; }, () => { rocket.isThrusting = false; });
-        setupButton(btnLeft, () => { moveLeft = true; }, () => { moveLeft = false; });
-        setupButton(btnRight, () => { moveRight = true; }, () => { moveRight = false; });
+        btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); moveLeft = true; }, {passive: false});
+        btnLeft.addEventListener('touchend', (e) => { e.preventDefault(); moveLeft = false; }, {passive: false});
+        btnLeft.addEventListener('mousedown', () => { moveLeft = true; });
+        btnLeft.addEventListener('mouseup', () => { moveLeft = false; });
 
-        // Başlat butonunu hem click hem touchstart ile garantiye alıyoruz
-        btnRestart.addEventListener('click', (e) => { e.preventDefault(); initGame(); });
-        btnRestart.addEventListener('touchstart', (e) => { e.preventDefault(); initGame(); }, { passive: false });
+        btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); moveRight = true; }, {passive: false});
+        btnRight.addEventListener('touchend', (e) => { e.preventDefault(); moveRight = false; }, {passive: false});
+        btnRight.addEventListener('mousedown', () => { moveRight = true; });
+        btnRight.addEventListener('mouseup', () => { moveRight = false; });
 
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowUp' || e.key === ' ') rocket.isThrusting = true;
-            if (e.key === 'ArrowLeft') moveLeft = true;
-            if (e.key === 'ArrowRight') moveRight = true;
-        });
-        window.addEventListener('keyup', (e) => {
-            if (e.key === 'ArrowUp' || e.key === ' ') rocket.isThrusting = false;
-            if (e.key === 'ArrowLeft') moveLeft = false;
-            if (e.key === 'ArrowRight') moveRight = false;
-        });
+        // Tıklama kilitlerini açmak için click yerine touchend/mouseup kullanımı
+        btnRestart.addEventListener('touchend', (e) => { e.preventDefault(); initGame(); }, {passive: false});
+        btnRestart.addEventListener('mouseup', (e) => { e.preventDefault(); initGame(); });
 
         function update() {
             if (gameState !== 'PLAYING') return;
@@ -311,22 +276,22 @@
             msgScreen.style.display = 'flex';
         }
 
-        function drawStaticBackground() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#1d3557';
-            ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
-        }
-
         function draw() {
+            // Oyun başlamamış olsa bile arka planı ve platformu çiz ki ekran boş kalmasın
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Eğer boyutlar atanmadıysa default ata (ilk açılış fix)
+            const currentPlatformY = platform.y || (canvas.height - 40);
+            const currentPlatformX = platform.x || (canvas.width / 2);
+            const currentNetX = gameState === 'START' ? currentPlatformX : platform.netX;
 
             // 1. Deniz Suyu
             ctx.fillStyle = '#1d3557';
-            ctx.fillRect(0, platform.y, canvas.width, canvas.height - platform.y);
+            ctx.fillRect(0, currentPlatformY, canvas.width, canvas.height - currentPlatformY);
 
             // 2. Dron Gemi Platformu
             ctx.save();
-            ctx.translate(platform.x, platform.y);
+            ctx.translate(currentPlatformX, currentPlatformY);
             ctx.scale(1, 0.3); 
             ctx.beginPath();
             ctx.arc(0, 0, platform.radius, 0, Math.PI * 2);
@@ -337,40 +302,33 @@
             ctx.stroke();
             ctx.restore();
 
-            // 3. Direkler
-            const pY = platform.y;
-            const nX = platform.netX;
+            // 3. Direkler ve Halatlar
+            const pY = currentPlatformY;
+            const nX = currentNetX;
             const nW = platform.netWidth;
             const poleH = 40; 
 
             ctx.lineWidth = 3;
             ctx.strokeStyle = '#8d99ae';
-
             ctx.beginPath(); ctx.moveTo(nX - nW/2, pY - 10); ctx.lineTo(nX - nW/2, pY - poleH); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(nX + nW/2, pY - 10); ctx.lineTo(nX + nW/2, pY - poleH); ctx.stroke();
             
-            // 4. Çelik Halatlar
             ctx.lineWidth = 2;
             ctx.strokeStyle = '#d8f3dc';
             for (let i = 0; i < 3; i++) {
                 let hY = (pY - poleH + 8) + (i * 8);
-                ctx.beginPath();
-                ctx.moveTo(nX - nW/2, hY);
-                ctx.lineTo(nX + nW/2, hY);
-                ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(nX - nW/2, hY); ctx.lineTo(nX + nW/2, hY); ctx.stroke();
             }
 
-            // Ön Direkler
             ctx.strokeStyle = '#b7b7a4';
             ctx.beginPath(); ctx.moveTo(nX - nW/2 + 5, pY); ctx.lineTo(nX - nW/2 + 5, pY - poleH + 10); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(nX + nW/2 - 5, pY); ctx.lineTo(nX + nW/2 - 5, pY - poleH + 10); ctx.stroke();
 
-            // 5. Roket
+            // 4. Sadece oyun oynanırken roketi çiz
             if (gameState === 'PLAYING' || gameState === 'SUCCESS') {
                 ctx.save();
                 ctx.translate(rocket.x, rocket.y);
 
-                // Alev Efekti
                 if (rocket.isThrusting && rocket.fuel > 0 && gameState === 'PLAYING') {
                     ctx.fillStyle = '#ffb703';
                     ctx.beginPath();
@@ -381,20 +339,14 @@
                     ctx.fill();
                 }
 
-                // Gövde
                 ctx.fillStyle = '#e5e5e5';
                 ctx.fillRect(-rocket.width/2, 0, rocket.width, rocket.height - 10);
                 
-                // Burun
                 ctx.fillStyle = '#118ab2';
                 ctx.beginPath();
-                ctx.moveTo(-rocket.width/2, 0);
-                ctx.lineTo(0, -12);
-                ctx.lineTo(rocket.width/2, 0);
-                ctx.closePath();
-                ctx.fill();
+                ctx.moveTo(-rocket.width/2, 0); ctx.lineTo(0, -12); ctx.lineTo(rocket.width/2, 0);
+                ctx.closePath(); ctx.fill();
 
-                // Kanatlar
                 ctx.fillStyle = '#f77f00';
                 ctx.fillRect(-rocket.width/2 - 4, rocket.height - 18, 4, 8);
                 ctx.fillRect(rocket.width/2, rocket.height - 18, 4, 8);
@@ -409,6 +361,7 @@
             requestAnimationFrame(gameLoop);
         }
 
+        // Döngüyü hemen başlat
         requestAnimationFrame(gameLoop);
     </script>
 </body>
